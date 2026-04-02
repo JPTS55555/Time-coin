@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -45,6 +46,7 @@ export default function App() {
               <Route path="ai" element={<AIAssistant />} />
             </Route>
           </Routes>
+          <SpeedInsights />
         </BrowserRouter>
       </AuthProvider>
     </ErrorBoundary>
