@@ -79,8 +79,14 @@ export function Feed() {
       });
 
       navigate(`/chats/${chatId}`);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `requests/${request.id}`);
+    } catch (error: any) {
+      console.error("Match error:", error);
+      if (error.message && error.message.includes('Missing or insufficient permissions')) {
+        alert("Oops! This request is no longer available or was already taken.");
+        setDismissedIds(prev => new Set(prev).add(request.id));
+      } else {
+        alert("An error occurred while matching. Please try again.");
+      }
     }
   };
 

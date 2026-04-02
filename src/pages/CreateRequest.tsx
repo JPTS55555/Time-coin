@@ -30,7 +30,7 @@ export function CreateRequest() {
       await addDoc(collection(db, 'requests'), {
         authorUid: user.uid,
         authorName: profile.displayName,
-        authorPhoto: profile.photoURL,
+        authorPhoto: profile.photoURL || '',
         title: title.trim(),
         description: description.trim(),
         type,

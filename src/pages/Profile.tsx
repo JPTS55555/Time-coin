@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { logout, db, handleFirestoreError, OperationType } from '../firebase';
-import { LogOut, Star, Clock, MapPin, Share2, PlaySquare } from 'lucide-react';
+import { LogOut, Star, Clock, MapPin, Share2, Play } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { AdBanner } from '../components/AdBanner';
 
@@ -99,7 +99,7 @@ export function Profile() {
             className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             <div className="flex items-center space-x-3">
-              <PlaySquare size={24} />
+              <Play size={24} />
               <div className="text-left">
                 <div className="font-bold">{watchingAd ? 'Watching Ad...' : 'Watch Ad to Earn'}</div>
                 <div className="text-xs text-emerald-100">Get +1 TimeCoin instantly</div>

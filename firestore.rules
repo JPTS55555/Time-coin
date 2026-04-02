@@ -150,10 +150,18 @@ service cloud.firestore {
                     (request.resource.data.role == 'user' || isAdmin());
                     
       // Update: Must be owner, cannot change uid, email, createdAt. Cannot self-assign admin.
+      // NEW: Allow anyone to increment credits by exactly 1 (for completing tasks)
       allow update: if isAuthenticated() && isValidUser(request.resource.data) &&
-                    (isOwner(userId) || isAdmin()) &&
                     areImmutableFieldsUnchanged(['uid', 'email', 'createdAt']) &&
-                    (request.resource.data.role == resource.data.role || isAdmin());
+                    (request.resource.data.role == resource.data.role || isAdmin()) &&
+                    (
+                      isOwner(userId) || 
+                      isAdmin() ||
+                      (
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['credits']) &&
+                        request.resource.data.credits == resource.data.credits + 1
+                      )
+                    );
     }
 
     match /requests/{requestId} {
@@ -168,8 +176,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && isValidRequest(request.resource.data) &&
                     areImmutableFieldsUnchanged(['authorUid', 'createdAt', 'type']) &&
                     (
-                      (isDocOwner()) || // Author can update
+                      isDocOwner() || // Author can update
                       (request.resource.data.status == 'matched' && resource.data.status == 'open' && request.resource.data.matchedWithUid == request.auth.uid) || // Someone accepting the request
+                      (request.resource.data.status == 'completed' && resource.data.status == 'matched' && (request.auth.uid == resource.data.authorUid || request.auth.uid == resource.data.matchedWithUid)) || // Either participant can complete it
                       isAdmin()
                     );
     }

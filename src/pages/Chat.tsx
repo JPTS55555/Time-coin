@@ -91,6 +91,11 @@ export function Chat() {
   const handleComplete = async () => {
     if (!requestData || !user || !otherUser) return;
     
+    if (requestData.status === 'completed') {
+      alert("This task is already completed!");
+      return;
+    }
+    
     setCompleting(true);
     try {
       // Determine who is the requester and who is the provider
@@ -110,11 +115,6 @@ export function Chat() {
         setCompleting(false);
         return;
       }
-
-      // 1. Update Request status
-      await updateDoc(doc(db, 'requests', requestData.id), {
-        status: 'completed'
-      });
 
       // 2. Transfer Credit
       const requesterRef = doc(db, 'users', requesterUid);
