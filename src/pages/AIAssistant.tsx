@@ -3,8 +3,15 @@ import { GoogleGenAI, Modality, LiveServerMessage } from '@google/genai';
 import { Mic, MicOff, Send, Sparkles, MapPin } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-// Initialize Gemini API
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Gemini API lazily
+let ai: GoogleGenAI | null = null;
+try {
+  if (process.env.GEMINI_API_KEY) {
+    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  }
+} catch (e) {
+  console.warn("Failed to initialize Gemini API:", e);
+}
 
 export function AIAssistant() {
   const { profile } = useAuth();
@@ -44,6 +51,10 @@ export function AIAssistant() {
     setIsTyping(true);
 
     try {
+      if (!ai) {
+        throw new Error("Gemini API key is missing or invalid. Please configure it in your environment variables.");
+      }
+
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: userMessage,
@@ -83,6 +94,11 @@ export function AIAssistant() {
   // --- Live API (Voice) Implementation ---
   const startLiveSession = async () => {
     try {
+      if (!ai) {
+        alert("Voice chat is unavailable because the Gemini API key is missing.");
+        return;
+      }
+
       setIsLiveActive(true);
       
       // Setup Audio Context for playback
