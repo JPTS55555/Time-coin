@@ -6,8 +6,9 @@ import { useAuth } from '../contexts/AuthContext';
 // Initialize Gemini API lazily
 let ai: GoogleGenAI | null = null;
 try {
-  if (process.env.GEMINI_API_KEY) {
-    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    ai = new GoogleGenAI({ apiKey });
   }
 } catch (e) {
   console.warn("Failed to initialize Gemini API:", e);
