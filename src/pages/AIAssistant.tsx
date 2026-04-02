@@ -3,17 +3,6 @@ import { GoogleGenAI, Modality, LiveServerMessage } from '@google/genai';
 import { Mic, MicOff, Send, Sparkles, MapPin } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-// Initialize Gemini API lazily
-let ai: GoogleGenAI | null = null;
-try {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  if (apiKey) {
-    ai = new GoogleGenAI({ apiKey });
-  }
-} catch (e) {
-  console.warn("Failed to initialize Gemini API:", e);
-}
-
 export function AIAssistant() {
   const { profile } = useAuth();
   const [messages, setMessages] = useState<{role: 'user' | 'model', text: string, grounding?: any[]}[]>([
@@ -52,9 +41,12 @@ export function AIAssistant() {
     setIsTyping(true);
 
     try {
-      if (!ai) {
-        throw new Error("Gemini API key is missing or invalid. Please configure it in your environment variables.");
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("A chave da API do Gemini não foi encontrada. O Vercel precisa de um novo Deploy.");
       }
+
+      const ai = new GoogleGenAI({ apiKey });
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -84,9 +76,9 @@ export function AIAssistant() {
         text: response.text || 'Sorry, I could not process that.',
         grounding: mapsLinks
       }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini Error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: 'Oops, something went wrong connecting to the AI.' }]);
+      setMessages(prev => [...prev, { role: 'model', text: `Oops, something went wrong: ${error.message || 'Unknown error'}` }]);
     } finally {
       setIsTyping(false);
     }
@@ -95,10 +87,13 @@ export function AIAssistant() {
   // --- Live API (Voice) Implementation ---
   const startLiveSession = async () => {
     try {
-      if (!ai) {
-        alert("Voice chat is unavailable because the Gemini API key is missing.");
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        alert("Voice chat is unavailable because the Gemini API key is missing. Please redeploy on Vercel.");
         return;
       }
+
+      const ai = new GoogleGenAI({ apiKey });
 
       setIsLiveActive(true);
       
