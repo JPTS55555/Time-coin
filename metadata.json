@@ -1,0 +1,8 @@
+{
+  "name": "TimeCoin",
+  "description": "The Tinder of Local Micro-Skills. Exchange time and skills with people nearby using virtual credits.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
+}
