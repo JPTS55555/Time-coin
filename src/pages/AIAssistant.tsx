@@ -49,7 +49,7 @@ export function AIAssistant() {
       const ai = new GoogleGenAI({ apiKey });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: userMessage,
         config: {
           systemInstruction: `You are a helpful assistant for the TimeCoin app. TimeCoin is a local micro-skills exchange platform where users trade time instead of money. 1 hour = 1 TimeCoin. The user's name is ${profile?.displayName || 'User'}. Keep answers concise and helpful.`,
