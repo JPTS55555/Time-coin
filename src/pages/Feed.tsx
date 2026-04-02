@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot, doc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, setDoc, serverTimestamp, updateDoc, getDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, ThumbsUp, X, Check } from 'lucide-react';
+import { MapPin, Clock, X, Check, Share2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { AdBanner } from '../components/AdBanner';
 
 export function Feed() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [requests, setRequests] = useState<any[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -35,22 +36,40 @@ export function Feed() {
     return () => unsubscribe();
   }, [user]);
 
+  const visibleRequests = requests.filter(req => !dismissedIds.has(req.id));
+  const currentRequest = visibleRequests[0];
+
   const handleMatch = async (request: any, accepted: boolean) => {
     if (!accepted) {
-      setCurrentIndex(prev => prev + 1);
+      setDismissedIds(prev => new Set(prev).add(request.id));
       return;
     }
 
-    if (!user) return;
+    if (!user || !profile) return;
 
     try {
-      // 1. Update request status
+      const requesterUid = request.type === 'request' ? request.authorUid : user.uid;
+      
+      if (requesterUid === user.uid && (profile.credits || 0) < 1) {
+        alert("You need at least 1 TimeCoin to accept an offer. Watch an ad on your profile to earn one!");
+        return;
+      }
+      
+      if (request.type === 'request') {
+        const authorSnap = await getDoc(doc(db, 'users', request.authorUid));
+        const authorData = authorSnap.data() as any;
+        if ((authorData?.credits || 0) < 1) {
+          alert("This user no longer has enough TimeCoins for this request.");
+          setDismissedIds(prev => new Set(prev).add(request.id));
+          return;
+        }
+      }
+
       await updateDoc(doc(db, 'requests', request.id), {
         status: 'matched',
         matchedWithUid: user.uid
       });
 
-      // 2. Create a chat
       const chatId = `${request.id}_${user.uid}`;
       await setDoc(doc(db, 'chats', chatId), {
         requestId: request.id,
@@ -65,15 +84,27 @@ export function Feed() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Loading nearby requests...</div>;
+  const handleShare = async () => {
+    if (!currentRequest) return;
+    const shareData = {
+      title: `TimeCoin: ${currentRequest.title}`,
+      text: `Can you help with this? "${currentRequest.title}" in exchange for TimeCoins!`,
+      url: window.location.href,
+    };
+    if (navigator.share) {
+      try { await navigator.share(shareData); } catch (err) { console.log('Share failed', err); }
+    } else {
+      alert('Share this link to invite friends: ' + window.location.href);
+    }
+  };
 
-  const currentRequest = requests[currentIndex];
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading nearby requests...</div>;
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
       <header className="bg-white p-4 shadow-sm flex justify-between items-center z-10">
         <h1 className="text-xl font-bold text-indigo-600">TimeCoin</h1>
-        <div className="flex items-center space-x-2 bg-indigo-50 px-3 py-1 rounded-full">
+        <div className="flex items-center space-x-2 bg-indigo-50 px-3 py-1 rounded-full cursor-pointer hover:bg-indigo-100 transition-colors" onClick={() => navigate('/profile')}>
           <Clock size={16} className="text-indigo-600" />
           <span className="font-semibold text-indigo-700">{profile?.credits || 0}</span>
         </div>
@@ -86,17 +117,17 @@ export function Feed() {
               <MapPin className="text-gray-400" size={24} />
             </div>
             <h2 className="text-xl font-semibold text-gray-800 mb-2">No more requests nearby</h2>
-            <p className="text-gray-500 text-sm">Check back later or post your own offer to earn credits!</p>
+            <p className="text-gray-500 text-sm mb-6">Invite friends to your neighborhood to get more matches!</p>
             <button 
               onClick={() => navigate('/create')}
-              className="mt-6 bg-indigo-600 text-white px-6 py-2 rounded-full font-medium hover:bg-indigo-700 transition-colors"
+              className="w-full bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-indigo-700 transition-colors mb-4"
             >
               Post an Offer
             </button>
+            <AdBanner format="rectangle" />
           </div>
         ) : (
           <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[70vh]">
-            {/* Card Header */}
             <div className={`p-4 text-white font-medium flex justify-between items-center ${
               currentRequest.type === 'offer' ? 'bg-emerald-500' : 'bg-amber-500'
             }`}>
@@ -108,7 +139,6 @@ export function Feed() {
               </span>
             </div>
 
-            {/* Card Body */}
             <div className="p-6 flex-1 flex flex-col">
               <div className="flex items-center space-x-4 mb-6">
                 <img 
@@ -135,23 +165,32 @@ export function Feed() {
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="p-6 bg-gray-50 flex justify-center space-x-6">
+            <div className="p-4 bg-gray-50 flex justify-center items-center space-x-4">
               <button 
                 onClick={() => handleMatch(currentRequest, false)}
-                className="w-16 h-16 bg-white rounded-full shadow-md flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors border border-gray-100"
+                className="w-14 h-14 bg-white rounded-full shadow-md flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors border border-gray-100"
               >
-                <X size={32} />
+                <X size={28} />
+              </button>
+              <button 
+                onClick={handleShare}
+                className="w-12 h-12 bg-white rounded-full shadow-md flex items-center justify-center text-blue-500 hover:bg-blue-50 transition-colors border border-gray-100"
+              >
+                <Share2 size={24} />
               </button>
               <button 
                 onClick={() => handleMatch(currentRequest, true)}
-                className="w-16 h-16 bg-indigo-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-indigo-700 transition-colors"
+                className="w-14 h-14 bg-indigo-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-indigo-700 transition-colors"
               >
-                <Check size={32} />
+                <Check size={28} />
               </button>
             </div>
           </div>
         )}
+      </div>
+      {/* Global Ad Banner at the bottom of the feed */}
+      <div className="px-4 pb-4">
+        <AdBanner format="banner" />
       </div>
     </div>
   );

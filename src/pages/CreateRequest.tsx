@@ -20,6 +20,13 @@ export function CreateRequest() {
 
     setLoading(true);
     try {
+      // Check credits if it's a request
+      if (type === 'request' && (profile.credits || 0) < 1) {
+        alert("You don't have enough TimeCoins to make a request. Watch an ad on your profile or offer a skill to earn one!");
+        setLoading(false);
+        return;
+      }
+
       await addDoc(collection(db, 'requests'), {
         authorUid: user.uid,
         authorName: profile.displayName,

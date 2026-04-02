@@ -8,7 +8,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export function AIAssistant() {
   const { profile } = useAuth();
-  const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([
+  const [messages, setMessages] = useState<{role: 'user' | 'model', text: string, grounding?: any[]}[]>([
     { role: 'model', text: 'Hi! I am your TimeCoin Assistant. I can help you find local skills, suggest fair trades, or just chat. How can I help you today?' }
   ]);
   const [inputText, setInputText] = useState('');
@@ -61,7 +61,17 @@ export function AIAssistant() {
         }
       });
 
-      setMessages(prev => [...prev, { role: 'model', text: response.text || 'Sorry, I could not process that.' }]);
+      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      const mapsLinks = groundingChunks?.filter((c: any) => c.maps?.uri).map((c: any) => ({
+        title: c.maps.title,
+        uri: c.maps.uri
+      }));
+
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: response.text || 'Sorry, I could not process that.',
+        grounding: mapsLinks
+      }]);
     } catch (error) {
       console.error("Gemini Error:", error);
       setMessages(prev => [...prev, { role: 'model', text: 'Oops, something went wrong connecting to the AI.' }]);
@@ -133,25 +143,31 @@ export function AIAssistant() {
             processor.connect(audioContextRef.current.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Handle Audio Output
+            // Handle Audio Output (Raw PCM 24kHz)
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio && audioContextRef.current) {
               const binaryString = atob(base64Audio);
               const len = binaryString.length;
-              const bytes = new Uint8Array(len);
+              const bytes = new Int16Array(len / 2);
+              const view = new DataView(new ArrayBuffer(len));
               for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
+                view.setUint8(i, binaryString.charCodeAt(i));
+              }
+              for (let i = 0; i < bytes.length; i++) {
+                bytes[i] = view.getInt16(i * 2, true);
               }
               
-              try {
-                const audioBuffer = await audioContextRef.current.decodeAudioData(bytes.buffer);
-                const source = audioContextRef.current.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContextRef.current.destination);
-                source.start();
-              } catch (e) {
-                console.error("Error decoding audio", e);
+              // Create AudioBuffer
+              const audioBuffer = audioContextRef.current.createBuffer(1, bytes.length, 24000);
+              const channelData = audioBuffer.getChannelData(0);
+              for (let i = 0; i < bytes.length; i++) {
+                channelData[i] = bytes[i] / 0x7FFF;
               }
+              
+              const source = audioContextRef.current.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(audioContextRef.current.destination);
+              source.start();
             }
           },
           onerror: (error) => {
@@ -250,6 +266,26 @@ export function AIAssistant() {
               }`}
             >
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+              
+              {msg.grounding && msg.grounding.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Sources from Google Maps:</p>
+                  <div className="space-y-2">
+                    {msg.grounding.map((link, lIdx) => (
+                      <a 
+                        key={lIdx} 
+                        href={link.uri} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center text-xs text-indigo-600 hover:underline"
+                      >
+                        <MapPin size={12} className="mr-1" />
+                        {link.title || 'View on Maps'}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}

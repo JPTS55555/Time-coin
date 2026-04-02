@@ -1,15 +1,48 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { logout } from '../firebase';
-import { LogOut, Star, Clock, MapPin, Settings } from 'lucide-react';
+import { logout, db, handleFirestoreError, OperationType } from '../firebase';
+import { LogOut, Star, Clock, MapPin, Share2, PlaySquare } from 'lucide-react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { AdBanner } from '../components/AdBanner';
 
 export function Profile() {
   const { user, profile } = useAuth();
+  const [watchingAd, setWatchingAd] = useState(false);
 
-  if (!profile) return null;
+  if (!profile || !user) return null;
+
+  const handleWatchAd = async () => {
+    setWatchingAd(true);
+    // Simulate watching an ad for 3 seconds
+    setTimeout(async () => {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          credits: (profile.credits || 0) + 1
+        });
+        alert("Thanks for watching! You earned 1 TimeCoin.");
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      } finally {
+        setWatchingAd(false);
+      }
+    }, 3000);
+  };
+
+  const handleInvite = async () => {
+    const shareData = {
+      title: 'Join TimeCoin',
+      text: 'Join me on TimeCoin and let\'s exchange skills for free!',
+      url: window.location.origin,
+    };
+    if (navigator.share) {
+      try { await navigator.share(shareData); } catch (err) { console.log('Share failed', err); }
+    } else {
+      alert('Share this link: ' + window.location.origin);
+    }
+  };
 
   return (
-    <div className="bg-gray-50 min-h-full">
+    <div className="bg-gray-50 min-h-full pb-8">
       {/* Header */}
       <div className="bg-indigo-600 pt-12 pb-24 px-6 rounded-b-3xl relative">
         <div className="flex justify-between items-center text-white mb-6">
@@ -40,7 +73,7 @@ export function Profile() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
             <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mb-2 text-indigo-600">
               <Clock size={24} />
@@ -58,6 +91,37 @@ export function Profile() {
           </div>
         </div>
 
+        {/* Monetization & Growth Actions */}
+        <div className="space-y-3 mb-8">
+          <button 
+            onClick={handleWatchAd}
+            disabled={watchingAd}
+            className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            <div className="flex items-center space-x-3">
+              <PlaySquare size={24} />
+              <div className="text-left">
+                <div className="font-bold">{watchingAd ? 'Watching Ad...' : 'Watch Ad to Earn'}</div>
+                <div className="text-xs text-emerald-100">Get +1 TimeCoin instantly</div>
+              </div>
+            </div>
+            <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-bold">+1</div>
+          </button>
+
+          <button 
+            onClick={handleInvite}
+            className="w-full bg-white border-2 border-indigo-100 text-indigo-600 p-4 rounded-2xl shadow-sm flex items-center justify-between hover:bg-indigo-50 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <Share2 size={24} />
+              <div className="text-left">
+                <div className="font-bold">Invite Friends</div>
+                <div className="text-xs text-indigo-400">Grow your local network</div>
+              </div>
+            </div>
+          </button>
+        </div>
+
         {/* Skills */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">I can offer</h3>
@@ -71,13 +135,10 @@ export function Profile() {
             ) : (
               <span className="text-gray-400 text-sm italic">No skills added yet.</span>
             )}
-            <button className="px-3 py-1 border border-dashed border-gray-300 text-gray-500 rounded-full text-sm font-medium hover:bg-gray-50">
-              + Add Skill
-            </button>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">I need help with</h3>
           <div className="flex flex-wrap gap-2">
             {profile.skillsNeeded?.length ? (
@@ -89,11 +150,11 @@ export function Profile() {
             ) : (
               <span className="text-gray-400 text-sm italic">No needs added yet.</span>
             )}
-            <button className="px-3 py-1 border border-dashed border-gray-300 text-gray-500 rounded-full text-sm font-medium hover:bg-gray-50">
-              + Add Need
-            </button>
           </div>
         </div>
+
+        {/* Ad Placeholder */}
+        <AdBanner format="banner" />
       </div>
     </div>
   );

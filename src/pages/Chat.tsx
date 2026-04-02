@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Send } from 'lucide-react';
@@ -12,6 +12,8 @@ export function Chat() {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [otherUser, setOtherUser] = useState<any>(null);
+  const [requestData, setRequestData] = useState<any>(null);
+  const [completing, setCompleting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +31,12 @@ export function Chat() {
             if (userSnap.exists()) {
               setOtherUser(userSnap.data());
             }
+          }
+
+          // Fetch request details
+          const reqSnap = await getDoc(doc(db, 'requests', data.requestId));
+          if (reqSnap.exists()) {
+            setRequestData({ id: reqSnap.id, ...reqSnap.data() });
           }
         }
       } catch (error) {
@@ -80,23 +88,105 @@ export function Chat() {
     }
   };
 
+  const handleComplete = async () => {
+    if (!requestData || !user || !otherUser) return;
+    
+    setCompleting(true);
+    try {
+      // Determine who is the requester and who is the provider
+      // Requester pays 1, Provider earns 1
+      let requesterUid, providerUid;
+      if (requestData.type === 'request') {
+        requesterUid = requestData.authorUid;
+        providerUid = requestData.matchedWithUid;
+      } else {
+        requesterUid = requestData.matchedWithUid;
+        providerUid = requestData.authorUid;
+      }
+
+      // Only the requester can mark as completed
+      if (user.uid !== requesterUid) {
+        alert("Only the person receiving the help can mark this as completed.");
+        setCompleting(false);
+        return;
+      }
+
+      // 1. Update Request status
+      await updateDoc(doc(db, 'requests', requestData.id), {
+        status: 'completed'
+      });
+
+      // 2. Transfer Credit
+      const requesterRef = doc(db, 'users', requesterUid);
+      const providerRef = doc(db, 'users', providerUid);
+
+      const reqSnap = await getDoc(requesterRef);
+      const provSnap = await getDoc(providerRef);
+
+      if (reqSnap.exists() && provSnap.exists()) {
+        const reqData = reqSnap.data();
+        const provData = provSnap.data();
+
+        // Use a batch to ensure atomic updates
+        const batch = writeBatch(db);
+        
+        batch.update(doc(db, 'requests', requestData.id), { status: 'completed' });
+        batch.update(requesterRef, { credits: Math.max(0, (reqData.credits || 0) - 1) });
+        batch.update(providerRef, { credits: (provData.credits || 0) + 1 });
+        
+        await batch.commit();
+      }
+
+      alert("Task completed! 1 TimeCoin has been transferred.");
+      navigate('/chats');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'credits');
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const isRequester = requestData && (
+    (requestData.type === 'request' && requestData.authorUid === user?.uid) ||
+    (requestData.type === 'offer' && requestData.matchedWithUid === user?.uid)
+  );
+
   return (
     <div className="flex flex-col h-full bg-gray-50">
       {/* Header */}
-      <header className="bg-white p-4 border-b border-gray-100 flex items-center shadow-sm z-10 sticky top-0">
-        <button onClick={() => navigate(-1)} className="p-2 mr-2 hover:bg-gray-100 rounded-full transition-colors">
-          <ArrowLeft size={20} className="text-gray-600" />
-        </button>
-        {otherUser && (
-          <div className="flex items-center">
-            <img 
-              src={otherUser.photoURL || `https://ui-avatars.com/api/?name=${otherUser.displayName}&background=random`} 
-              alt={otherUser.displayName}
-              className="w-10 h-10 rounded-full object-cover border border-gray-100"
-              referrerPolicy="no-referrer"
-            />
-            <h2 className="ml-3 font-semibold text-gray-900">{otherUser.displayName}</h2>
-          </div>
+      <header className="bg-white p-4 border-b border-gray-100 flex items-center justify-between shadow-sm z-10 sticky top-0">
+        <div className="flex items-center">
+          <button onClick={() => navigate(-1)} className="p-2 mr-2 hover:bg-gray-100 rounded-full transition-colors">
+            <ArrowLeft size={20} className="text-gray-600" />
+          </button>
+          {otherUser && (
+            <div className="flex items-center">
+              <img 
+                src={otherUser.photoURL || `https://ui-avatars.com/api/?name=${otherUser.displayName}&background=random`} 
+                alt={otherUser.displayName}
+                className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                referrerPolicy="no-referrer"
+              />
+              <div className="ml-3">
+                <h2 className="font-semibold text-gray-900 leading-tight">{otherUser.displayName}</h2>
+                {requestData && (
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                    {requestData.status === 'completed' ? '✅ Completed' : '🤝 Matched'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {isRequester && requestData?.status === 'matched' && (
+          <button 
+            onClick={handleComplete}
+            disabled={completing}
+            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+          >
+            {completing ? '...' : 'Complete'}
+          </button>
         )}
       </header>
 
